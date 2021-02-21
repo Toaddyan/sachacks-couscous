@@ -1,0 +1,46 @@
+---
+- name: couscous
+  hosts: all
+  gather_facts: False
+  vars:
+    COUSCOUS_PATH: ~/couscous
+
+  tasks:
+  - name: Delete {{ COUSCOUS_PATH }} folder
+    file:
+      path: "{{ COUSCOUS_PATH }}"
+      state: absent
+
+  - name: Create {{ COUSCOUS_PATH }} folder
+    file:
+      path: "{{ COUSCOUS_PATH }}"
+      state: directory
+
+  - name: Check PATH for {{ COUSCOUS_PATH }}/bin
+    shell: |
+      if ! grep -q "{{ COUSCOUS_PATH }}" ~/.bashrc; then
+        echo "export PATH=\"{{ COUSCOUS_PATH }}/bin/:\$PATH\"" >> ~/.bashrc
+      fi
+
+  - name: Install code-server
+    shell: curl -fsSL https://code-server.dev/install.sh | sh -s -- --prefix {{ COUSCOUS_PATH }} --method standalone
+    register: install_code_server
+
+  - name: Print stdout of install_code_server
+    debug:
+      msg: "{{ install_code_server.stdout }}"
+
+  - name: Download and install MS-vsliveshare
+    shell: |
+      TEMP_LIVESHARE="$(mktemp)"
+      wget --content-disposition -E https://marketplace.visualstudio.com/_apis/public/gallery/publishers/MS-vsliveshare/vsextensions/vsliveshare/latest/vspackage -P $TEMP_LIVESHARE
+      gunzip $TEMP_LIVESHARE/MS-vsliveshare.vsliveshare-latest.vsix.gz
+      {{ COUSCOUS_PATH }}/bin/code-server --install-extension $TEMP_LIVESHARE/MS-vsliveshare.vsliveshare-latest.vsix
+      PRODUCT_JSON=$(realpath {{COUSCOUS_PATH}}/lib/*/lib/vscode/product.json)
+      mv $PRODUCT_JSON $PRODUCT_JSON.bak
+      jq '.extensionAllowedProposedApi += ["ms-vsliveshare.vsliveshare"]' $PRODUCT_JSON.bak > $PRODUCT_JSON
+    register: stdout
+
+  - name: Print out
+    debug:
+      msg: "{{ stdout.stdout_lines }}"
